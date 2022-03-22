@@ -164,25 +164,32 @@ func signRound4(t *testing.T, signers map[uint32]*Signer, round3Bcast map[uint32
 	return round4Bcast
 }
 
-// todo
 func signRound5(t *testing.T, curve elliptic.Curve, pk *curves.EcPoint, signers map[uint32]*Signer, round4Bcast map[uint32]*Round4Bcast, playerMin int) (map[uint32]*Round5Bcast, map[uint32]map[uint32]*Round5P2PSend) {
-	var err error
+	var (
+		err error
 
-	round5Bcast := make(map[uint32]*Round5Bcast, playerMin)
-	r5P2p := make(map[uint32]map[uint32]*Round5P2PSend, playerMin)
+		round5Bcast = make(map[uint32]*Round5Bcast, playerMin)
+		r5P2p       = make(map[uint32]map[uint32]*Round5P2PSend, playerMin)
+	)
 
-	round5Bcast[1], r5P2p[1], err = signers[1].SignRound5(map[uint32]*Round4Bcast{2: round4Bcast[2], 3: round4Bcast[3]})
-	require.NoError(t, err)
+	for i := uint32(1); i <= uint32(playerMin); i++ {
+		witnesses := map[uint32]*Round4Bcast{}
 
-	round5Bcast[2], r5P2p[2], err = signers[2].SignRound5(map[uint32]*Round4Bcast{1: round4Bcast[1], 3: round4Bcast[3]})
-	require.NoError(t, err)
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				witnesses[j] = round4Bcast[j]
+			}
+		}
 
-	round5Bcast[3], r5P2p[3], err = signers[3].SignRound5(map[uint32]*Round4Bcast{1: round4Bcast[1], 2: round4Bcast[2]})
-	require.NoError(t, err)
+		round5Bcast[i], r5P2p[i], err = signers[i].SignRound5(witnesses)
+		require.NoError(t, err)
+	}
 
+	// todo what is Rbark?
 	Rbark, err := signers[1].state.Rbark.Add(signers[2].state.Rbark)
 	require.NoError(t, err)
 
+	// todo what is Rbark?
 	Rbark, err = Rbark.Add(signers[3].state.Rbark)
 	require.NoError(t, err)
 
