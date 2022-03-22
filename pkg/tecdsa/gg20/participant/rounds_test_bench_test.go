@@ -49,7 +49,7 @@ func fullRoundTestUseDistributed(
 	signerOut, r1P2P := signRound1(t, signers, playerCnt)
 
 	// round 2
-	p2p := signRound2(t, signers, signerOut, r1P2P, useDistributed)
+	p2p := signRound2(t, signers, signerOut, r1P2P, playerMin, useDistributed)
 
 	// round 3
 	round3Bcast := signRound3(t, signers, p2p, playerMin)
@@ -78,55 +78,46 @@ func signRound1(t *testing.T, signers map[uint32]*Signer, playerCnt int) (map[ui
 	return signerOut, r1P2P
 }
 
-// todo
-func signRound2(t *testing.T, signers map[uint32]*Signer, signerOut map[uint32]*Round1Bcast, r1P2P map[uint32]map[uint32]*Round1P2PSend, useDistributed bool) map[uint32]map[uint32]*P2PSend {
-	err := signers[1].setCosigners([]uint32{2, 3})
-	require.NoError(t, err)
+func signRound2(t *testing.T, signers map[uint32]*Signer, signerOut map[uint32]*Round1Bcast, r1P2P map[uint32]map[uint32]*Round1P2PSend, playerMin int, useDistributed bool) map[uint32]map[uint32]*P2PSend {
+	var (
+		p2p = make(map[uint32]map[uint32]*P2PSend)
 
-	p2p := make(map[uint32]map[uint32]*P2PSend)
+		r1P2pIn map[uint32]*Round1P2PSend
+	)
 
-	var r1P2pIn map[uint32]*Round1P2PSend
-	if useDistributed {
-		r1P2pIn = make(map[uint32]*Round1P2PSend, 3)
-		r1P2pIn[2] = r1P2P[2][1]
-		r1P2pIn[3] = r1P2P[3][1]
+	for i := uint32(1); i <= uint32(playerMin); i++ {
+		var cosigners []uint32
+
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				cosigners = append(cosigners, j)
+			}
+		}
+
+		err := signers[i].setCosigners(cosigners)
+		require.NoError(t, err)
+
+		if useDistributed {
+			r1P2pIn = make(map[uint32]*Round1P2PSend, playerMin)
+
+			for j := uint32(1); j <= uint32(playerMin); j++ {
+				if i != j {
+					r1P2pIn[j] = r1P2P[j][i]
+				}
+			}
+		}
+
+		params := map[uint32]*Round1Bcast{}
+
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				params[j] = signerOut[j]
+			}
+		}
+
+		p2p[i], err = signers[i].SignRound2(params, r1P2pIn)
+		require.NoError(t, err)
 	}
-
-	p2p[1], err = signers[1].SignRound2(map[uint32]*Round1Bcast{
-		2: signerOut[2],
-		3: signerOut[3],
-	}, r1P2pIn)
-	require.NoError(t, err)
-
-	err = signers[2].setCosigners([]uint32{1, 3})
-	require.NoError(t, err)
-
-	if useDistributed {
-		r1P2pIn = make(map[uint32]*Round1P2PSend, 3)
-		r1P2pIn[1] = r1P2P[1][2]
-		r1P2pIn[3] = r1P2P[3][2]
-	}
-
-	p2p[2], err = signers[2].SignRound2(map[uint32]*Round1Bcast{
-		1: signerOut[1],
-		3: signerOut[3],
-	}, r1P2pIn)
-	require.NoError(t, err)
-
-	err = signers[3].setCosigners([]uint32{1, 2})
-	require.NoError(t, err)
-
-	if useDistributed {
-		r1P2pIn = make(map[uint32]*Round1P2PSend, 3)
-		r1P2pIn[1] = r1P2P[1][3]
-		r1P2pIn[2] = r1P2P[2][3]
-	}
-
-	p2p[3], err = signers[3].SignRound2(map[uint32]*Round1Bcast{
-		1: signerOut[1],
-		2: signerOut[2],
-	}, r1P2pIn)
-	require.NoError(t, err)
 
 	return p2p
 }
