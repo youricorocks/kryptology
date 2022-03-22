@@ -254,23 +254,18 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 	require.Nil(t, err)
 	require.NoError(t, err)
 
-	sigs := make([]*curves.EcdsaSignature, 3)
+	sigs := make([]*curves.EcdsaSignature, playerMin)
 
-	sigs[0], err = signers[1].SignOutput(map[uint32]*Round6FullBcast{
-		2: round6FullBcast[1],
-		3: round6FullBcast[2],
-	})
-	require.NoError(t, err)
+	for i := uint32(1); i <= uint32(playerMin); i++ {
+		in := map[uint32]*Round6FullBcast{}
 
-	sigs[1], err = signers[2].SignOutput(map[uint32]*Round6FullBcast{
-		1: round6FullBcast[0],
-		3: round6FullBcast[2],
-	})
-	require.NoError(t, err)
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				in[j] = round6FullBcast[j-1]
+			}
+		}
 
-	sigs[2], err = signers[3].SignOutput(map[uint32]*Round6FullBcast{
-		1: round6FullBcast[0],
-		2: round6FullBcast[1],
-	})
-	require.NoError(t, err)
+		sigs[i-1], err = signers[i].SignOutput(in)
+		require.NoError(t, err)
+	}
 }
