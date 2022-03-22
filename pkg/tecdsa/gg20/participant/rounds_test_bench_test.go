@@ -152,20 +152,23 @@ func signRound3(t *testing.T, signers map[uint32]*Signer, p2p map[uint32]map[uin
 	return round3Bcast
 }
 
-// todo
 func signRound4(t *testing.T, signers map[uint32]*Signer, round3Bcast map[uint32]*Round3Bcast, playerMin int) map[uint32]*Round4Bcast {
 	var err error
 
 	round4Bcast := make(map[uint32]*Round4Bcast, playerMin)
 
-	round4Bcast[1], err = signers[1].SignRound4(map[uint32]*Round3Bcast{2: round3Bcast[2], 3: round3Bcast[3]})
-	require.NoError(t, err)
+	for i := uint32(1); i <= uint32(playerMin); i++ {
+		signP2P := map[uint32]*Round3Bcast{}
 
-	round4Bcast[2], err = signers[2].SignRound4(map[uint32]*Round3Bcast{1: round3Bcast[1], 3: round3Bcast[3]})
-	require.NoError(t, err)
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				signP2P[j] = round3Bcast[j]
+			}
+		}
 
-	round4Bcast[3], err = signers[3].SignRound4(map[uint32]*Round3Bcast{1: round3Bcast[1], 2: round3Bcast[2]})
-	require.NoError(t, err)
+		round4Bcast[i], err = signers[i].SignRound4(signP2P)
+		require.NoError(t, err)
+	}
 
 	return round4Bcast
 }
