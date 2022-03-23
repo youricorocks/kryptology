@@ -44,24 +44,34 @@ func (m TestRun) String() string {
 }
 
 var (
-	minCount       = *flag.Int("gg20.mincount", 10, "From signers count.")
-	maxCount       = *flag.Int("gg20.maxcount", 200, "To signers count.")
-	countStep      = *flag.Int("gg20.countstep", 10, "Signers count step.")
-	useDistributed = *flag.Bool("gg20.use-distributed", false, "UseDistributed flag.")
-	thresholdStart = *flag.Float64("gg20.threshold-start", 0.5, "Threshold percent start.")
-	thresholdEnd   = *flag.Float64("gg20.threshold-end", 1, "Threshold percent end.")
-	thresholdStep  = *flag.Float64("gg20.threshold-step", 0.5, "Threshold step.")
-	curveName      = *flag.String("gg20.curve-name", "secp256k1", "Curve name (possible: 'secp256k1', 'secp256r1')")
+	minCount       = flag.Int("gg20.mincount", 10, "From signers count.")
+	maxCount       = flag.Int("gg20.maxcount", 200, "To signers count.")
+	countStep      = flag.Int("gg20.countstep", 10, "Signers count step.")
+	useDistributed = flag.Bool("gg20.use-distributed", false, "UseDistributed flag.")
+	thresholdStart = flag.Float64("gg20.threshold-start", 0.5, "Threshold percent start.")
+	thresholdEnd   = flag.Float64("gg20.threshold-end", 1, "Threshold percent end.")
+	thresholdStep  = flag.Float64("gg20.threshold-step", 0.5, "Threshold step.")
+	curveName      = flag.String("gg20.curve-name", "secp256k1", "Curve name (possible: 'secp256k1', 'secp256r1')")
 )
 
 func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 	t.Log("Starting bench ...")
 
+	t.Log("Bench configuration:")
+	t.Logf("gg20.mincount=%v", minCount)
+	t.Logf("gg20.maxcount=%v", maxCount)
+	t.Logf("gg20.countstep=%v", countStep)
+	t.Logf("gg20.use-distributed=%v", useDistributed)
+	t.Logf("gg20.gg20.threshold-start=%v", thresholdStart)
+	t.Logf("gg20.threshold-end=%v", thresholdEnd)
+	t.Logf("gg20.threshold-step=%v", thresholdStep)
+	t.Logf("gg20.curve-name=%v", curveName)
+
 	var curve elliptic.Curve
 
 	msg := []byte{31: 0x01}
 
-	switch curveName {
+	switch *curveName {
 	case "secp256k1":
 		curve = btcec.S256()
 	case "secp256r1":
@@ -80,8 +90,8 @@ func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 		require.NoError(t, outputFile.Close())
 	}()
 
-	for count := minCount; count <= maxCount; count += countStep {
-		for thresholdPercent := thresholdStart; thresholdPercent <= thresholdEnd && thresholdPercent <= 1.0; thresholdPercent += thresholdStep {
+	for count := *minCount; count <= *maxCount; count += *countStep {
+		for thresholdPercent := *thresholdStart; thresholdPercent <= *thresholdEnd && thresholdPercent <= 1.0; thresholdPercent += *thresholdStep {
 			if thresholdPercent > 1 {
 				thresholdPercent = 1
 			}
@@ -92,9 +102,9 @@ func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 				Protocol:       "gg20",
 				Threshold:      threshold,
 				Count:          count,
-				Curve:          curveName,
+				Curve:          *curveName,
 				MsgLen:         len(hash.Bytes()),
-				UseDistributed: useDistributed,
+				UseDistributed: *useDistributed,
 			}
 
 			t.Log(m.String())
@@ -118,7 +128,7 @@ func fullRoundTest(
 	verify curves.EcdsaVerify,
 	m *TestRun,
 ) {
-	pk, signers := setupSignersMap(t, curve, m.Threshold, m.Count, false, verify, useDistributed)
+	pk, signers := setupSignersMap(t, curve, m.Threshold, m.Count, false, verify, m.UseDistributed)
 
 	sk := signers[1].share.Value
 
@@ -139,7 +149,7 @@ func fullRoundTest(
 	signerOut, r1P2P := signRound1(t, signers, m.Count)
 
 	// round 2
-	p2p := signRound2(t, signers, signerOut, r1P2P, m.Threshold, useDistributed)
+	p2p := signRound2(t, signers, signerOut, r1P2P, m.Threshold, m.UseDistributed)
 
 	// round 3
 	round3Bcast := signRound3(t, signers, p2p, m.Threshold)
@@ -153,7 +163,7 @@ func fullRoundTest(
 	m.OnlineStartTime = time.Now()
 
 	// round 6
-	signRound6(t, msg, signers, round5Bcast, r5P2P, m.Threshold, useDistributed)
+	signRound6(t, msg, signers, round5Bcast, r5P2P, m.Threshold, m.UseDistributed)
 }
 
 func signRound1(t *testing.T, signers map[uint32]*Signer, playerCnt int) (map[uint32]*Round1Bcast, map[uint32]map[uint32]*Round1P2PSend) {
