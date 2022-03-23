@@ -185,22 +185,21 @@ func signRound5(t *testing.T, curve elliptic.Curve, pk *curves.EcPoint, signers 
 		require.NoError(t, err)
 	}
 
-	// todo what is Rbark?
-	Rbark, err := signers[1].state.Rbark.Add(signers[2].state.Rbark)
+	rBark := signers[1].state.Rbark
+
+	for i := uint32(2); i <= uint32(playerMin); i++ {
+		rBark, err = rBark.Add(signers[i].state.Rbark)
+		require.NoError(t, err)
+	}
+
+	rBark.Y, err = core.Neg(rBark.Y, curve.Params().P)
 	require.NoError(t, err)
 
-	// todo what is Rbark?
-	Rbark, err = Rbark.Add(signers[3].state.Rbark)
+	rBark, err = rBark.Add(pk)
 	require.NoError(t, err)
 
-	Rbark.Y, err = core.Neg(Rbark.Y, curve.Params().P)
-	require.NoError(t, err)
-
-	Rbark, err = Rbark.Add(pk)
-	require.NoError(t, err)
-
-	if !Rbark.IsIdentity() {
-		t.Errorf("%v != %v", Rbark.X, pk.X)
+	if !rBark.IsIdentity() {
+		t.Errorf("%v != %v", rBark.X, pk.X)
 		t.FailNow()
 	}
 
