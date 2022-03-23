@@ -22,8 +22,8 @@ func TestSignerSignRound_Bench(t *testing.T) {
 }
 
 func fullRoundTest(t *testing.T, curve elliptic.Curve, msg []byte, verify curves.EcdsaVerify) {
-	fullRoundTestUseDistributed(t, curve, msg, verify, 3, 5, false)
-	fullRoundTestUseDistributed(t, curve, msg, verify, 3, 5, true)
+	fullRoundTestUseDistributed(t, curve, msg, verify, 5, 10, false)
+	fullRoundTestUseDistributed(t, curve, msg, verify, 5, 10, true)
 }
 
 func fullRoundTestUseDistributed(
@@ -37,7 +37,12 @@ func fullRoundTestUseDistributed(
 ) {
 	pk, signers := setupSignersMap(t, curve, playerMin, playerCnt, false, verify, useDistributed)
 
-	sk := signers[1].share.Value.Add(signers[2].share.Value).Add(signers[3].share.Value)
+	sk := signers[1].share.Value
+
+	for i := uint32(2); i <= uint32(playerMin); i++ {
+		sk = sk.Add(signers[i].share.Value)
+	}
+
 	_, ppk := btcec.PrivKeyFromBytes(curve, sk.Bytes())
 
 	if ppk.X.Cmp(pk.X) != 0 || ppk.Y.Cmp(pk.Y) != 0 {
@@ -215,7 +220,7 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 		r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
 
 		// check failure cases, first with nil input then with missing participant data
-		for k := uint32(0); k < 3; k++ {
+		for k := uint32(0); k < uint32(playerMin); k++ {
 			in := map[uint32]*Round5Bcast{}
 
 			for j := uint32(1); j <= uint32(playerMin); j++ {
