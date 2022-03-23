@@ -232,27 +232,29 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 	}
 
 	round6FullBcast := make([]*Round6FullBcast, playerMin)
-	round6FullBcast[0], err = signers[1].SignRound6Full(msg, map[uint32]*Round5Bcast{2: round5Bcast[2], 3: round5Bcast[3]}, r6P2pin)
-	require.Nil(t, err)
 
-	if useDistributed {
-		r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
-		r6P2pin[1] = r5P2P[1][2]
-		r6P2pin[3] = r5P2P[3][2]
+	for i := uint32(1); i <= uint32(playerMin); i++ {
+		in := map[uint32]*Round5Bcast{}
+
+		for j := uint32(1); j <= uint32(playerMin); j++ {
+			if i != j {
+				in[j] = round5Bcast[j]
+			}
+		}
+
+		if useDistributed && i > 1 {
+			r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
+
+			for j := uint32(1); j <= uint32(playerMin); j++ {
+				if i != j {
+					r6P2pin[j] = r5P2P[j][i]
+				}
+			}
+		}
+
+		round6FullBcast[i-1], err = signers[i].SignRound6Full(msg, in, r6P2pin)
+		require.NoError(t, err)
 	}
-
-	round6FullBcast[1], err = signers[2].SignRound6Full(msg, map[uint32]*Round5Bcast{1: round5Bcast[1], 3: round5Bcast[3]}, r6P2pin)
-	require.Nil(t, err)
-
-	if useDistributed {
-		r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
-		r6P2pin[1] = r5P2P[1][3]
-		r6P2pin[2] = r5P2P[2][3]
-	}
-
-	round6FullBcast[2], err = signers[3].SignRound6Full(msg, map[uint32]*Round5Bcast{1: round5Bcast[1], 2: round5Bcast[2]}, r6P2pin)
-	require.Nil(t, err)
-	require.NoError(t, err)
 
 	sigs := make([]*curves.EcdsaSignature, playerMin)
 
