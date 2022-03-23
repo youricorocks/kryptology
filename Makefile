@@ -110,3 +110,6 @@ run-accumulator-ecc: ## Runs test of cryptographic accumulator
 .PHONY: compare-bench
 compare-bench: ## Runs bench on master and the current branch and compares the result
 	bash scripts/perf-comp-local
+
+gg20-bench:
+	go test -run TestGG20_SignRoundsTime_Secp256k1 ./pkg/tecdsa/gg20/participant -v -count 1 -timeout 0

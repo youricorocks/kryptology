@@ -2,44 +2,127 @@ package participant
 
 import (
 	"crypto/elliptic"
+	"flag"
+	"fmt"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/coinbase/kryptology/pkg/core"
 	"github.com/coinbase/kryptology/pkg/core/curves"
 	"github.com/stretchr/testify/require"
+	"html/template"
+	"os"
 	"testing"
+	"time"
 )
 
-func TestSignerSignRound_Bench(t *testing.T) {
-	var (
+const Header = `### GG20 bench
+
+| Protocol | Threshold | Count | Curve | MsgLen | Prepossessing rounds time | Online round time | UseDistributed flag |
+|----------|-----------|-------|-------|--------|---------------------------|-------------------|---------------------|
+`
+
+const Line = `| {{.Protocol}} | {{.Threshold}} | {{.Count}} | {{.Curve}} | {{.MsgLen}} | {{.PrepossessingRoundsTime}} | {{.OnlineRoundTime}} | {{.UseDistributed}} |
+`
+
+type TestRun struct {
+	Protocol       string
+	Threshold      int
+	Count          int
+	Curve          string
+	MsgLen         int
+	UseDistributed bool
+
+	PrepossessingStartTime time.Time
+	OnlineStartTime        time.Time
+
+	PrepossessingRoundsTime time.Duration
+	OnlineRoundTime         time.Duration
+}
+
+func (m TestRun) String() string {
+	return fmt.Sprintf("%s, curve=%s, threshold=%d, count=%d, msgLen=%d, useDistributed=%v",
+		m.Protocol, m.Curve, m.Threshold, m.Count, m.MsgLen, m.UseDistributed)
+}
+
+var (
+	minCount       = *flag.Int("gg20.mincount", 10, "From signers count.")
+	maxCount       = *flag.Int("gg20.maxcount", 200, "To signers count.")
+	countStep      = *flag.Int("gg20.countstep", 10, "Signers count step.")
+	useDistributed = *flag.Bool("gg20.use-distributed", false, "UseDistributed flag.")
+	thresholdStart = *flag.Float64("gg20.threshold-start", 0.5, "Threshold percent start.")
+	thresholdEnd   = *flag.Float64("gg20.threshold-end", 1, "Threshold percent end.")
+	thresholdStep  = *flag.Float64("gg20.threshold-step", 0.5, "Threshold step.")
+	curveName      = *flag.String("gg20.curve-name", "secp256k1", "Curve name (possible: 'secp256k1', 'secp256r1')")
+)
+
+func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
+	t.Log("Starting bench ...")
+
+	var curve elliptic.Curve
+
+	msg := []byte{31: 0x01}
+
+	switch curveName {
+	case "secp256k1":
 		curve = btcec.S256()
-		msg   = []byte{31: 0x01}
-	)
+	case "secp256r1":
+		curve = elliptic.P256()
+	default:
+		t.Fatalf("Unknown curve '%s'", curve)
+	}
 
 	hash, err := core.Hash(msg, curve)
 	require.NoError(t, err)
 
-	fullRoundTest(t, curve, hash.Bytes(), k256Verifier)
+	outputFile, err := createBenchOutputFile(t)
+	require.NoError(t, err)
+
+	defer func() {
+		require.NoError(t, outputFile.Close())
+	}()
+
+	for count := minCount; count <= maxCount; count += countStep {
+		for thresholdPercent := thresholdStart; thresholdPercent <= thresholdEnd && thresholdPercent <= 1.0; thresholdPercent += thresholdStep {
+			if thresholdPercent > 1 {
+				thresholdPercent = 1
+			}
+
+			threshold := int(float64(count) * thresholdPercent)
+
+			m := &TestRun{
+				Protocol:       "gg20",
+				Threshold:      threshold,
+				Count:          count,
+				Curve:          curveName,
+				MsgLen:         len(hash.Bytes()),
+				UseDistributed: useDistributed,
+			}
+
+			t.Log(m.String())
+
+			t.Run("gg20", func(t *testing.T) {
+				fullRoundTest(t, curve, hash.Bytes(), k256Verifier, m)
+
+				m.PrepossessingRoundsTime = m.OnlineStartTime.Sub(m.PrepossessingStartTime)
+				m.OnlineRoundTime = time.Now().Sub(m.OnlineStartTime)
+
+				require.NoError(t, appendTestRunToFile(outputFile, m))
+			})
+		}
+	}
 }
 
-func fullRoundTest(t *testing.T, curve elliptic.Curve, msg []byte, verify curves.EcdsaVerify) {
-	fullRoundTestUseDistributed(t, curve, msg, verify, 5, 10, false)
-	fullRoundTestUseDistributed(t, curve, msg, verify, 5, 10, true)
-}
-
-func fullRoundTestUseDistributed(
+func fullRoundTest(
 	t *testing.T,
 	curve elliptic.Curve,
 	msg []byte,
 	verify curves.EcdsaVerify,
-	playerMin int,
-	playerCnt int,
-	useDistributed bool,
+	m *TestRun,
 ) {
-	pk, signers := setupSignersMap(t, curve, playerMin, playerCnt, false, verify, useDistributed)
+	pk, signers := setupSignersMap(t, curve, m.Threshold, m.Count, false, verify, useDistributed)
 
 	sk := signers[1].share.Value
 
-	for i := uint32(2); i <= uint32(playerMin); i++ {
+	for i := uint32(2); i <= uint32(m.Threshold); i++ {
 		sk = sk.Add(signers[i].share.Value)
 	}
 
@@ -50,23 +133,27 @@ func fullRoundTestUseDistributed(
 		t.FailNow()
 	}
 
+	m.PrepossessingStartTime = time.Now()
+
 	// round 1
-	signerOut, r1P2P := signRound1(t, signers, playerCnt)
+	signerOut, r1P2P := signRound1(t, signers, m.Count)
 
 	// round 2
-	p2p := signRound2(t, signers, signerOut, r1P2P, playerMin, useDistributed)
+	p2p := signRound2(t, signers, signerOut, r1P2P, m.Threshold, useDistributed)
 
 	// round 3
-	round3Bcast := signRound3(t, signers, p2p, playerMin)
+	round3Bcast := signRound3(t, signers, p2p, m.Threshold)
 
 	// round 4
-	round4Bcast := signRound4(t, signers, round3Bcast, playerMin)
+	round4Bcast := signRound4(t, signers, round3Bcast, m.Threshold)
 
 	// round 5
-	round5Bcast, r5P2P := signRound5(t, curve, pk, signers, round4Bcast, playerMin)
+	round5Bcast, r5P2P := signRound5(t, curve, pk, signers, round4Bcast, m.Threshold)
+
+	m.OnlineStartTime = time.Now()
 
 	// round 6
-	signRound6(t, msg, signers, round5Bcast, r5P2P, playerMin, useDistributed)
+	signRound6(t, msg, signers, round5Bcast, r5P2P, m.Threshold, useDistributed)
 }
 
 func signRound1(t *testing.T, signers map[uint32]*Signer, playerCnt int) (map[uint32]*Round1Bcast, map[uint32]map[uint32]*Round1P2PSend) {
@@ -277,4 +364,36 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 		sigs[i-1], err = signers[i].SignOutput(in)
 		require.NoError(t, err)
 	}
+}
+
+func createBenchOutputFile(t *testing.T) (*os.File, error) {
+	fileName := fmt.Sprintf("./bench_output/%s.md", time.Now().Format(time.RFC3339))
+
+	t.Logf("Bench output file: %s", fileName)
+
+	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = f.WriteString(Header)
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func appendTestRunToFile(f *os.File, m *TestRun) error {
+	t, err := template.New("bench").Parse(Line)
+	if err != nil {
+		return err
+	}
+
+	err = t.Execute(f, *m)
+	if err != nil {
+		return fmt.Errorf("execute template: %w", err)
+	}
+
+	return err
 }
