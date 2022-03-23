@@ -207,28 +207,31 @@ func signRound5(t *testing.T, curve elliptic.Curve, pk *curves.EcPoint, signers 
 	return round5Bcast, r5P2p
 }
 
-// todo
 func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcast map[uint32]*Round5Bcast, r5P2P map[uint32]map[uint32]*Round5P2PSend, playerMin int, useDistributed bool) {
 	var err error
 
 	var r6P2pin map[uint32]*Round5P2PSend
 
 	if useDistributed {
-		// Check failure cases, first with nil input
-		// then with missing participant data
-		_, err = signers[1].SignRound6Full(msg, map[uint32]*Round5Bcast{2: round5Bcast[2], 3: round5Bcast[3]}, r6P2pin)
-		require.Error(t, err)
-
 		r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
-		_, err = signers[1].SignRound6Full(msg, map[uint32]*Round5Bcast{2: round5Bcast[2], 3: round5Bcast[3]}, r6P2pin)
 
-		require.Error(t, err)
+		// check failure cases, first with nil input then with missing participant data
+		for k := uint32(0); k < 3; k++ {
+			in := map[uint32]*Round5Bcast{}
 
-		r6P2pin[2] = r5P2P[2][1]
-		_, err = signers[1].SignRound6Full(msg, map[uint32]*Round5Bcast{2: round5Bcast[2], 3: round5Bcast[3]}, r6P2pin)
-		require.Error(t, err)
+			for j := uint32(1); j <= uint32(playerMin); j++ {
+				if j != 1 {
+					in[j] = round5Bcast[j]
+				}
+			}
 
-		r6P2pin[3] = r5P2P[3][1]
+			_, err = signers[1].SignRound6Full(msg, in, r6P2pin)
+			require.Error(t, err)
+
+			if k > 0 {
+				r6P2pin[k+1] = r5P2P[k+1][1]
+			}
+		}
 	}
 
 	round6FullBcast := make([]*Round6FullBcast, playerMin)
