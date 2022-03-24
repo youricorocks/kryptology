@@ -4,14 +4,16 @@ import (
 	"crypto/elliptic"
 	"flag"
 	"fmt"
-	"github.com/btcsuite/btcd/btcec"
-	"github.com/coinbase/kryptology/pkg/core"
-	"github.com/coinbase/kryptology/pkg/core/curves"
-	"github.com/stretchr/testify/require"
 	"html/template"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/stretchr/testify/require"
+
+	"github.com/coinbase/kryptology/pkg/core"
+	"github.com/coinbase/kryptology/pkg/core/curves"
 )
 
 const Header = `### GG20 bench
@@ -44,8 +46,8 @@ func (m TestRun) String() string {
 }
 
 var (
-	minCount       = flag.Int("gg20.mincount", 10, "From signers count.")
-	maxCount       = flag.Int("gg20.maxcount", 200, "To signers count.")
+	minCount       = flag.Int("gg20.mincount", 5, "From signers count.")
+	maxCount       = flag.Int("gg20.maxcount", 55, "To signers count.")
 	countStep      = flag.Int("gg20.countstep", 10, "Signers count step.")
 	useDistributed = flag.Bool("gg20.use-distributed", false, "UseDistributed flag.")
 	thresholdStart = flag.Float64("gg20.threshold-start", 0.5, "Threshold percent start.")
