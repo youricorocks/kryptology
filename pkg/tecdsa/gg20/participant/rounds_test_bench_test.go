@@ -58,24 +58,27 @@ func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 	t.Log("Starting bench ...")
 
 	t.Log("Bench configuration:")
-	t.Logf("gg20.mincount=%v", minCount)
-	t.Logf("gg20.maxcount=%v", maxCount)
-	t.Logf("gg20.countstep=%v", countStep)
-	t.Logf("gg20.use-distributed=%v", useDistributed)
-	t.Logf("gg20.gg20.threshold-start=%v", thresholdStart)
-	t.Logf("gg20.threshold-end=%v", thresholdEnd)
-	t.Logf("gg20.threshold-step=%v", thresholdStep)
-	t.Logf("gg20.curve-name=%v", curveName)
+	t.Logf("gg20.mincount=%v", *minCount)
+	t.Logf("gg20.maxcount=%v", *maxCount)
+	t.Logf("gg20.countstep=%v", *countStep)
+	t.Logf("gg20.use-distributed=%v", *useDistributed)
+	t.Logf("gg20.gg20.threshold-start=%v", *thresholdStart)
+	t.Logf("gg20.threshold-end=%v", *thresholdEnd)
+	t.Logf("gg20.threshold-step=%v", *thresholdStep)
+	t.Logf("gg20.curve-name=%v", *curveName)
 
 	var curve elliptic.Curve
+	var verifier curves.EcdsaVerify
 
 	msg := []byte{31: 0x01}
 
 	switch *curveName {
 	case "secp256k1":
 		curve = btcec.S256()
+		verifier = k256Verifier
 	case "secp256r1":
 		curve = elliptic.P256()
+		verifier = ecdsaVerifier
 	default:
 		t.Fatalf("Unknown curve '%s'", curve)
 	}
@@ -110,7 +113,7 @@ func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 			t.Log(m.String())
 
 			t.Run("gg20", func(t *testing.T) {
-				fullRoundTest(t, curve, hash.Bytes(), k256Verifier, m)
+				fullRoundTest(t, curve, hash.Bytes(), verifier, m)
 
 				m.PrepossessingRoundsTime = m.OnlineStartTime.Sub(m.PrepossessingStartTime)
 				m.OnlineRoundTime = time.Now().Sub(m.OnlineStartTime)
