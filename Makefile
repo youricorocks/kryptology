@@ -114,10 +114,10 @@ compare-bench: ## Runs bench on master and the current branch and compares the r
 gg20-bench:
 	go test -v -count 1 -timeout 0 -run TestGG20_SignRoundsTime_Secp256k1 ./pkg/tecdsa/gg20/participant \
       --gg20.mincount=5 \
-      --gg20.maxcount=255 \
+      --gg20.maxcount=100 \
       --gg20.countstep=50 \
       --gg20.use-distributed=false \
       --gg20.threshold-start=0.5 \
       --gg20.threshold-end=1.0 \
       --gg20.threshold-step=0.5 \
-      --gg20.curve-name=secp256k1
+      --gg20.curve-name=secp256r1
