@@ -18,11 +18,11 @@ import (
 
 const Header = `### GG20 bench
 
-| Protocol | Threshold | Count | Curve | MsgLen | Prepossessing rounds time | Online round time | UseDistributed flag |
-|----------|-----------|-------|-------|--------|---------------------------|-------------------|---------------------|
+| Protocol | Threshold | Count | Curve | MsgLen | Prepossessing rounds time | Round6 time | Round6 online time | UseDistributed flag |
+|----------|-----------|-------|-------|--------|---------------------------|-------------|--------------------|---------------------|
 `
 
-const Line = `| {{.Protocol}} | {{.Threshold}} | {{.Count}} | {{.Curve}} | {{.MsgLen}} | {{.PrepossessingRoundsTime}} | {{.OnlineRoundTime}} | {{.UseDistributed}} |
+const Line = `| {{.Protocol}} | {{.Threshold}} | {{.Count}} | {{.Curve}} | {{.MsgLen}} | {{.PrepossessingRoundsTime}} | {{.Round6Time}} | {{.Round6OnlineTime}} | {{.UseDistributed}} |
 `
 
 type TestRun struct {
@@ -34,10 +34,12 @@ type TestRun struct {
 	UseDistributed bool
 
 	PrepossessingStartTime time.Time
-	OnlineStartTime        time.Time
+	Round6StartTime        time.Time
+	Round6OnlineStartTime  time.Time
 
 	PrepossessingRoundsTime time.Duration
-	OnlineRoundTime         time.Duration
+	Round6Time              time.Duration
+	Round6OnlineTime        time.Duration
 }
 
 func (m TestRun) String() string {
@@ -117,8 +119,11 @@ func TestGG20_SignRoundsTime_Secp256k1(t *testing.T) {
 			t.Run("gg20", func(t *testing.T) {
 				fullRoundTest(t, curve, hash.Bytes(), verifier, m)
 
-				m.PrepossessingRoundsTime = m.OnlineStartTime.Sub(m.PrepossessingStartTime)
-				m.OnlineRoundTime = time.Now().Sub(m.OnlineStartTime)
+				curTime := time.Now()
+
+				m.PrepossessingRoundsTime = m.Round6StartTime.Sub(m.PrepossessingStartTime)
+				m.Round6Time = curTime.Sub(m.Round6StartTime)
+				m.Round6OnlineTime = curTime.Sub(m.Round6OnlineStartTime)
 
 				require.NoError(t, appendTestRunToFile(outputFile, m))
 			})
@@ -165,10 +170,10 @@ func fullRoundTest(
 	// round 5
 	round5Bcast, r5P2P := signRound5(t, curve, pk, signers, round4Bcast, m.Threshold)
 
-	m.OnlineStartTime = time.Now()
+	m.Round6StartTime = time.Now()
 
 	// round 6
-	signRound6(t, msg, signers, round5Bcast, r5P2P, m.Threshold, m.UseDistributed)
+	signRound6(t, msg, signers, round5Bcast, r5P2P, m.Threshold, m.UseDistributed, m)
 }
 
 func signRound1(t *testing.T, signers map[uint32]*Signer, playerCnt int) (map[uint32]*Round1Bcast, map[uint32]map[uint32]*Round1P2PSend) {
@@ -313,32 +318,10 @@ func signRound5(t *testing.T, curve elliptic.Curve, pk *curves.EcPoint, signers 
 	return round5Bcast, r5P2p
 }
 
-func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcast map[uint32]*Round5Bcast, r5P2P map[uint32]map[uint32]*Round5P2PSend, playerMin int, useDistributed bool) {
+func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcast map[uint32]*Round5Bcast, r5P2P map[uint32]map[uint32]*Round5P2PSend, playerMin int, useDistributed bool, m *TestRun) {
 	var err error
 
 	var r6P2pin map[uint32]*Round5P2PSend
-
-	if useDistributed {
-		r6P2pin = make(map[uint32]*Round5P2PSend, playerMin)
-
-		// check failure cases, first with nil input then with missing participant data
-		for k := uint32(0); k < uint32(playerMin); k++ {
-			in := map[uint32]*Round5Bcast{}
-
-			for j := uint32(1); j <= uint32(playerMin); j++ {
-				if j != 1 {
-					in[j] = round5Bcast[j]
-				}
-			}
-
-			_, err = signers[1].SignRound6Full(msg, in, r6P2pin)
-			require.Error(t, err)
-
-			if k > 0 {
-				r6P2pin[k+1] = r5P2P[k+1][1]
-			}
-		}
-	}
 
 	round6FullBcast := make([]*Round6FullBcast, playerMin)
 
@@ -361,7 +344,7 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 			}
 		}
 
-		round6FullBcast[i-1], err = signers[i].SignRound6Full(msg, in, r6P2pin)
+		round6FullBcast[i-1], err = testSignRound6Full(signers[i], msg, in, r6P2pin, m)
 		require.NoError(t, err)
 	}
 
@@ -379,6 +362,29 @@ func signRound6(t *testing.T, msg []byte, signers map[uint32]*Signer, round5Bcas
 		sigs[i-1], err = signers[i].SignOutput(in)
 		require.NoError(t, err)
 	}
+}
+
+func testSignRound6Full(signer *Signer, hash []byte, in map[uint32]*Round5Bcast, p2p map[uint32]*Round5P2PSend, m *TestRun) (*Round6FullBcast, error) {
+	if err := signer.verifyStateMap(6, in); err != nil {
+		return nil, err
+	}
+
+	if !signer.state.keyGenType.IsTrustedDealer() {
+		if err := signer.verifyStateMap(6, p2p); err != nil {
+			return nil, err
+		}
+	}
+
+	// Steps 1-6
+	err := signer.signRound6Offline(in, p2p)
+	if err != nil {
+		return nil, err
+	}
+
+	m.Round6OnlineStartTime = time.Now()
+
+	// Steps 7-10
+	return signer.signRound6Online(hash)
 }
 
 func createBenchOutputFile(t *testing.T) (*os.File, error) {
