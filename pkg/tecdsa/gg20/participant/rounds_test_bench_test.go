@@ -49,8 +49,8 @@ func (m TestRun) String() string {
 
 var (
 	minCount       = flag.Int("gg20.mincount", 5, "From signers count.")
-	maxCount       = flag.Int("gg20.maxcount", 55, "To signers count.")
-	countStep      = flag.Int("gg20.countstep", 10, "Signers count step.")
+	maxCount       = flag.Int("gg20.maxcount", 255, "To signers count.")
+	countStep      = flag.Int("gg20.countstep", 50, "Signers count step.")
 	useDistributed = flag.Bool("gg20.use-distributed", false, "UseDistributed flag.")
 	thresholdStart = flag.Float64("gg20.threshold-start", 0.5, "Threshold percent start.")
 	thresholdEnd   = flag.Float64("gg20.threshold-end", 1, "Threshold percent end.")
