@@ -18,6 +18,12 @@ import (
 
 const Header = `### GG20 bench
 
+NOTE 1: these values are collected for the worst case scenario, when the next signer is waiting for the previous signer
+before processing it's own signing. Also, for each step signing is processed for everyone with everyone case (where len(everyone) = Threshold).
+
+NOTE 2: there are cases with the full threshold value. Such thresholds is somewhat redundant for real world. In the real world
+you can set the threshold to smaller values: 2*count/3 + 1, count/2, ...
+
 | Protocol | Threshold | Count | Curve | MsgLen | Prepossessing rounds time | Round6 time | Round6 online time | UseDistributed flag |
 |----------|-----------|-------|-------|--------|---------------------------|-------------|--------------------|---------------------|
 `
